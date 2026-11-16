@@ -1,6 +1,6 @@
 # SaveSmart AI - Frontend
 
-React + Vite, mobile-first (lebar maksimal 430px, tampil seperti ponsel di desktop).
+React + Vite, responsif: tampilan web (sidebar kiri) di layar lebar, tampilan ponsel (menu bawah) di layar kecil.
 Folder ini untuk dimasukkan ke `frontend/` di repository `ManajemenProyek-Kelompok2` (branch `Frontend`).
 
 ## Menjalankan

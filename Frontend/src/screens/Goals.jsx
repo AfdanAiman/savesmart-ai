@@ -40,6 +40,7 @@ export function Goals() {
         </>
       )}
 
+      <div className="grid-2">
       {rest.map((g) => (
         <button key={g.id} className="card link-card" onClick={() => nav(`/target/${g.id}`)}>
           <b style={{ fontSize: 17, color: 'var(--ink2)' }}>{g.name}</b>
@@ -47,8 +48,9 @@ export function Goals() {
           <Progress pct={pctOf(g.saved, g.target)} color="var(--indigo)" />
         </button>
       ))}
+      </div>
 
-      <button className="btn" style={{ marginTop: 14 }} onClick={() => nav('/target/new')}>Tambah Target Baru</button>
+      <button className="btn fit" style={{ marginTop: 14 }} onClick={() => nav('/target/new')}>Tambah Target Baru</button>
     </div>
   )
 }

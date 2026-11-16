@@ -117,12 +117,47 @@ export function BottomNav() {
   )
 }
 
-// Layout untuk layar yang memakai navigasi bawah
+// Sidebar untuk layar lebar (web)
+export function Sidebar() {
+  const { pathname } = useLocation()
+  const items = NAV.filter((n) => !n.center)
+  return (
+    <aside className="sidebar" aria-label="Menu utama">
+      <Link to="/home" className="side-brand">
+        <Logo size={38} />
+        <span>SaveSmart AI</span>
+      </Link>
+      <nav>
+        {items.slice(0, 2).map((n) => (
+          <Link key={n.to} to={n.to} className={'side-item' + (n.match.some((m) => pathname.startsWith(m)) ? ' active' : '')}>
+            <Icon name={n.icon} size={20} />
+            {n.label}
+          </Link>
+        ))}
+        <Link to="/scan" className="side-scan">
+          <Icon name="scan" size={20} />
+          Scan Struk
+        </Link>
+        {items.slice(2).map((n) => (
+          <Link key={n.to} to={n.to} className={'side-item' + (n.match.some((m) => pathname.startsWith(m)) ? ' active' : '')}>
+            <Icon name={n.icon} size={20} />
+            {n.label}
+          </Link>
+        ))}
+      </nav>
+    </aside>
+  )
+}
+
+// Layout untuk layar yang memakai navigasi: sidebar (web) / menu bawah (ponsel)
 export function WithNav() {
   return (
-    <>
-      <Outlet />
+    <div className="shell">
+      <Sidebar />
+      <main className="main">
+        <Outlet />
+      </main>
       <BottomNav />
-    </>
+    </div>
   )
 }

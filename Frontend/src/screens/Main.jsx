@@ -29,6 +29,8 @@ export function Home() {
         </button>
       </div>
 
+      <div className="two-col">
+      <div>
       <div className="balance">
         <div className="lbl">Total Saldo</div>
         <div className="big">{rp(state.summary.balance)}</div>
@@ -48,7 +50,9 @@ export function Home() {
         </div>
       )}
 
-      <div className="section">
+      </div>
+      <div className="card tx-card">
+      <div className="section" style={{ marginTop: 0 }}>
         <h2>Transaksi Terbaru</h2>
         <Link to="/report">Lihat laporan</Link>
       </div>
@@ -62,6 +66,8 @@ export function Home() {
           <div className={'amt' + (t.amount > 0 ? ' pos' : '')}>{t.amount > 0 ? '+' : ''}{rp(t.amount)}</div>
         </div>
       ))}
+      </div>
+      </div>
     </div>
   )
 }
@@ -87,6 +93,7 @@ export function Report() {
         ))}
       </div>
 
+      <div className="two-col">
       <div className="card">
         <div className="muted">{r.title}</div>
         <div className="bars">
@@ -109,6 +116,7 @@ export function Report() {
         ))}
       </div>
 
+      </div>
       {goal && (
         <Link to={`/target/${goal.id}`} className="goal-card">
           <small>Progres tabungan</small>
@@ -129,6 +137,7 @@ export function Notifications() {
         <h1>Notifikasi</h1>
         <p className="sub">{unreadCount} belum dibaca</p>
       </div>
+      <div className="stack">
       {state.notifications.map((n) => (
         <button
           key={n.id}
@@ -142,6 +151,7 @@ export function Notifications() {
           </div>
         </button>
       ))}
+      </div>
     </div>
   )
 }

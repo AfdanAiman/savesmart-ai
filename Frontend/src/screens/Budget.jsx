@@ -54,6 +54,7 @@ export function Budget() {
         <div className="muted" style={{ marginTop: 10 }}>{totalPct}% terpakai - sisa {daysLeft()} hari</div>
       </div>
 
+      <div className="grid-2">
       {shown.map((b) => {
         const pct = pctOf(b.spent, b.limit)
         const isOver = b.spent > b.limit
@@ -70,8 +71,9 @@ export function Budget() {
           </button>
         )
       })}
+      </div>
 
-      <button className="btn" style={{ marginTop: 14 }} onClick={() => nav('/budget/edit')}>Atur Anggaran</button>
+      <button className="btn fit" style={{ marginTop: 14 }} onClick={() => nav('/budget/edit')}>Atur Anggaran</button>
 
       {showAlert && over && <AlertModal budget={over} onClose={closeAlert} />}
     </div>

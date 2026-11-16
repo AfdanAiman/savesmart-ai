@@ -28,17 +28,19 @@ const FEATURES = [
 export function Welcome() {
   const nav = useNavigate()
   return (
-    <div className="screen center">
+    <div className="screen center wide">
       <h1 style={{ marginBottom: 18 }}>Satu aplikasi untuk keuanganmu</h1>
-      {FEATURES.map((f) => (
-        <div key={f.letter} className="card feature" style={{ marginTop: 12 }}>
-          <div className={`avatar ${f.cls}`}>{f.letter}</div>
-          <div>
-            <b>{f.title}</b>
-            <span className="t">{f.text}</span>
+      <div className="features">
+        {FEATURES.map((f) => (
+          <div key={f.letter} className="card feature">
+            <div className={`avatar ${f.cls}`}>{f.letter}</div>
+            <div>
+              <b>{f.title}</b>
+              <span className="t">{f.text}</span>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
       <button className="btn" style={{ marginTop: 14 }} onClick={() => nav('/register')}>Mulai Sekarang</button>
       <Link to="/login" className="link">Sudah punya akun? Masuk</Link>
     </div>
