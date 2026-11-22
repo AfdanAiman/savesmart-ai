@@ -7,7 +7,7 @@ export function Splash() {
   const nav = useNavigate()
   const { state } = useStore()
   useEffect(() => {
-    const t = setTimeout(() => nav(state.user ? '/home' : '/welcome', { replace: true }), 1800)
+    const t = setTimeout(() => nav(state.user ? '/home' : '/login', { replace: true }), 1800)
     return () => clearTimeout(t)
   }, [nav, state.user])
   return (
@@ -47,6 +47,21 @@ export function Welcome() {
   )
 }
 
+function AuthBrand() {
+  return (
+    <div className="auth-brand">
+      <Logo size={56} dark />
+      <h2>SaveSmart AI</h2>
+      <p>Catat pengeluaran dari foto struk, pantau anggaran, dan capai target tabunganmu.</p>
+      <ul>
+        <li>Scan struk otomatis dengan AI Vision</li>
+        <li>Peringatan saat anggaran hampir habis</li>
+        <li>Hitung kebutuhan tabungan per bulan</li>
+      </ul>
+    </div>
+  )
+}
+
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 export function Login() {
@@ -69,8 +84,10 @@ export function Login() {
   }
 
   return (
-    <form className="screen center" onSubmit={submit} noValidate>
-      <Logo size={60} />
+    <div className="auth">
+    <AuthBrand />
+    <form className="auth-form" onSubmit={submit} noValidate>
+      <div className="auth-logo"><Logo size={60} /></div>
       <h1 style={{ marginTop: 20 }}>Selamat datang kembali</h1>
       <p className="sub">Masuk untuk melanjutkan mengelola keuanganmu.</p>
       <Field label="Email" error={err.email}>
@@ -83,7 +100,9 @@ export function Login() {
         <button className="btn" type="submit">Masuk</button>
         <button className="btn outline" type="button" onClick={() => nav('/register')}>Daftar akun baru</button>
       </div>
+      <Link to="/welcome" className="link">Kenali fitur SaveSmart AI</Link>
     </form>
+    </div>
   )
 }
 
@@ -108,7 +127,9 @@ export function Register() {
   }
 
   return (
-    <form className="screen center" onSubmit={submit} noValidate>
+    <div className="auth">
+    <AuthBrand />
+    <form className="auth-form" onSubmit={submit} noValidate>
       <h1>Buat akun baru</h1>
       <p className="sub">Mulai catat pengeluaran dan capai target tabunganmu.</p>
       <Field label="Nama lengkap" error={err.name}>
@@ -125,5 +146,6 @@ export function Register() {
       </div>
       <Link to="/login" className="link">Sudah punya akun? Masuk</Link>
     </form>
+    </div>
   )
 }

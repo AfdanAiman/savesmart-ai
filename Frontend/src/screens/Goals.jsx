@@ -168,7 +168,7 @@ export function Profile() {
         <p className="sub">{state.user.email}</p>
       </div>
       <button className="btn outline" onClick={resetDemo}>Reset data demo</button>
-      <button className="btn" onClick={() => { logout(); nav('/welcome', { replace: true }) }}>Keluar</button>
+      <button className="btn" onClick={() => { logout(); nav('/login', { replace: true }) }}>Keluar</button>
     </div>
   )
 }

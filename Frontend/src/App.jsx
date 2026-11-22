@@ -10,7 +10,7 @@ import { GoalDetail, GoalNew, Goals, Profile } from './screens/Goals.jsx'
 // Hanya bisa diakses setelah masuk
 function Protected() {
   const { state } = useStore()
-  return state.user ? <Outlet /> : <Navigate to="/welcome" replace />
+  return state.user ? <Outlet /> : <Navigate to="/login" replace />
 }
 
 export default function App() {

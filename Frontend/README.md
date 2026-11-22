@@ -31,7 +31,7 @@ src/
 
 ## Alur layar
 
-Splash -> Welcome -> Daftar/Masuk -> Beranda.
+Splash -> Masuk (atau Daftar) -> Beranda. Halaman Welcome (pengenalan fitur) bisa dibuka dari tautan di halaman Masuk.
 Beranda -> Laporan, Notifikasi, Scan, Anggaran, Target, Profil (navigasi bawah).
 Scan -> (membaca) -> Konfirmasi -> Tersimpan, atau -> Gagal Baca -> Scan Ulang / Input Manual.
 Anggaran -> Atur Anggaran. Notifikasi "Anggaran Hiburan terlampaui" membuka modal peringatan.
