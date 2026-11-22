@@ -1,4 +1,5 @@
 import { getDb } from '../db/index.js'
+import { CATEGORIES } from '../config.js'
 import { addDays, addMonths, dayOfWeek, monthEnd, monthStart, rp, today } from '../util.js'
 import { checkBudgetAlert } from './budgets.js'
 import { notify } from './notify.js'
@@ -6,7 +7,7 @@ import { notify } from './notify.js'
 const signed = (t) => ({
   id: t.id, title: t.title, category: t.category,
   amount: t.type === 'expense' ? -t.amount : t.amount,
-  type: t.type, date: t.date, source: t.source,
+  type: t.type, date: t.date, source: t.source, note: t.note ?? '',
 })
 
 export function listTransactions(userId, { limit = 50, category, from, to } = {}) {
@@ -21,11 +22,11 @@ export function listTransactions(userId, { limit = 50, category, from, to } = {}
     .map(signed)
 }
 
-export function addTransaction(userId, { title, category, amount, type, date, source }) {
+export function addTransaction(userId, { title, category, amount, type, date, source, note = '' }) {
   const db = getDb()
   const r = db
-    .prepare('INSERT INTO transactions (user_id, title, category, amount, type, date, source) VALUES (?,?,?,?,?,?,?)')
-    .run(userId, title, category, amount, type, date, source)
+    .prepare('INSERT INTO transactions (user_id, title, category, amount, type, date, source, note) VALUES (?,?,?,?,?,?,?,?)')
+    .run(userId, title, category, amount, type, date, source, note)
   const tx = signed(db.prepare('SELECT * FROM transactions WHERE id = ?').get(r.lastInsertRowid))
 
   let budget = null
@@ -43,9 +44,9 @@ export function addTransaction(userId, { title, category, amount, type, date, so
 }
 
 // Ringkasan: pemasukan & pengeluaran bulan ini, saldo = seluruh pemasukan - seluruh pengeluaran.
-export function summary(userId) {
+export function summary(userId, forMonth) {
   const db = getDb()
-  const t = today()
+  const t = forMonth ? `${forMonth}-01` : today()
   const month = db
     .prepare(`SELECT type, COALESCE(SUM(amount),0) AS s FROM transactions
               WHERE user_id = ? AND date BETWEEN ? AND ? GROUP BY type`)
@@ -101,10 +102,13 @@ export function report(userId, range) {
               WHERE user_id = ? AND type = 'expense' AND date BETWEEN ? AND ? GROUP BY category`)
     .all(userId, from, to)
   const total = byCat.reduce((a, c) => a + c.s, 0)
-  const categories = ['Makanan', 'Transport', 'Hiburan', 'Lainnya'].map((name) => {
-    const amount = byCat.find((c) => c.category === name)?.s ?? 0
-    return { name, amount, pct: total ? Math.round((amount / total) * 100) : 0 }
-  })
+  const categories = [...new Set([...CATEGORIES, ...byCat.map((c) => c.category)])]
+    .map((name) => {
+      const amount = byCat.find((c) => c.category === name)?.s ?? 0
+      return { name, amount, pct: total ? Math.round((amount / total) * 100) : 0 }
+    })
+    .filter((c) => c.amount > 0)
+    .sort((a, b) => b.amount - a.amount)
 
-  return { range, title, labels: buckets.map((b) => b.label), values, total, categories }
+  return { range, title, from, to, days: Math.round((Date.parse(to) - Date.parse(from)) / 86400000) + 1, labels: buckets.map((b) => b.label), values, total, categories }
 }

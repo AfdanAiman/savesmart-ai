@@ -29,4 +29,7 @@ export const config = {
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 8,
 }
 
-export const CATEGORIES = ['Makanan', 'Transport', 'Hiburan', 'Lainnya']
+// Kategori pengeluaran (sama dengan pilihan di frontend)
+export const CATEGORIES = ['Makanan', 'Transport', 'Hiburan', 'Belanja', 'Tagihan', 'Kesehatan', 'Pendidikan', 'Lainnya']
+// Kategori pemasukan; kalau tidak diisi, otomatis 'Pemasukan'
+export const INCOME_CATEGORIES = ['Uang Saku', 'Gaji', 'Bonus', 'Hadiah', 'Lainnya']

@@ -13,10 +13,10 @@ cd Backend
 npm install
 cp .env.example .env     # Windows PowerShell: Copy-Item .env.example .env
 npm run dev              # http://localhost:4000
-npm test                 # 11 tes otomatis (database sementara di memori)
+npm test                 # tes otomatis (database sementara di memori)
 ```
 
-Tabel dibuat otomatis saat server pertama kali berjalan. File database ada di `Backend/data/` (tidak ikut Git).
+Tabel dibuat otomatis saat server pertama kali berjalan (migrasi `Database/migrations/*.sql`, termasuk `002_frontend_web.sql` untuk frontend versi web). File database ada di `Backend/data/` (tidak ikut Git).
 Jalankan frontend di terminal lain (`cd Frontend && npm run dev`); permintaan `/api` otomatis diteruskan ke port 4000.
 
 Perintah lain: `npm run db:migrate` (hanya migrasi) dan `npm run db:seed -- email@contoh.com` (isi ulang data contoh satu akun).
@@ -36,23 +36,31 @@ Perintah lain: `npm run db:migrate` (hanya migrasi) dan `npm run db:seed -- emai
 |---|---|---|
 | POST | `/api/auth/register` | Daftar `{name, email, password}` -> `{token, user}` |
 | POST | `/api/auth/login` | Masuk `{email, password}` -> `{token, user}` |
+| POST | `/api/auth/forgot-password` | Lupa kata sandi `{email}` -> 202 (jawaban seragam; belum mengirim email) |
 | GET | `/api/auth/me` | Data akun yang sedang masuk |
-| GET | `/api/summary` | Pemasukan & pengeluaran bulan ini, saldo |
-| GET | `/api/transactions?limit=` | Daftar transaksi terbaru |
-| POST | `/api/transactions` | Catat `{title, amount, category, type?, date?, source?}` -> `{transaction, budget}` |
-| GET | `/api/budgets` | Anggaran + terpakai bulan ini |
+| GET | `/api/users/me` | Profil lengkap + preferensi |
+| PUT | `/api/users/me` | Ubah profil `{name, email, phone?, language?, currency?, budgetPeriod?, notifBudget?, notifGoal?, notifWeekly?}` |
+| PUT | `/api/users/me/password` | Ganti kata sandi `{currentPassword, newPassword}` |
+| GET | `/api/summary?month=YYYY-MM` | Pemasukan & pengeluaran bulan itu (default bulan ini), saldo |
+| GET | `/api/transactions?limit=&category=&from=&to=` | Daftar transaksi terbaru |
+| POST | `/api/transactions` | Catat `{title, amount, category?, type?, date?, source?, note?}` -> `{transaction, budget}` |
+| GET | `/api/budgets?month=YYYY-MM` | Anggaran + terpakai di bulan itu (default bulan ini) |
 | PUT | `/api/budgets/:category` | Atur `{limit, alertAt}` |
-| GET | `/api/goals` | Daftar target + riwayat setoran |
-| POST | `/api/goals` | Buat `{name, target, months}` |
+| DELETE | `/api/budgets/:category` | Hapus anggaran kategori |
+| GET | `/api/goals?status=active` atau `inactive` | Daftar target + riwayat setoran |
+| POST | `/api/goals` | Buat `{name, target, months?, initialAmount?}` (`months` kosong = fleksibel) |
 | GET | `/api/goals/:id` | Detail target |
-| POST | `/api/goals/:id/deposits` | Setor `{amount}` |
+| PUT | `/api/goals/:id` | Ubah `{name, target, months?}` (setoran tidak berubah) |
+| PATCH | `/api/goals/:id/status` | Aktif / nonaktifkan `{status: "active"}` atau `"inactive"` |
+| POST | `/api/goals/:id/deposits` | Setor `{amount, date?, note?}` |
 | GET | `/api/notifications` | Daftar notifikasi |
 | POST | `/api/notifications/:id/read` | Tandai dibaca (`/read-all` untuk semua) |
-| GET | `/api/report?range=week\|month\|year` | Data grafik + porsi per kategori |
+| GET | `/api/report?range=week`, `month`, atau `year` | Data grafik + porsi per kategori + rentang tanggal |
 | POST | `/api/scan` | Unggah foto struk (form field `receipt`) -> hasil OCR |
 | POST | `/api/demo/reset` | Kembalikan data contoh akun ini |
 
-Kategori: `Makanan`, `Transport`, `Hiburan`, `Lainnya` (pemasukan otomatis `Pemasukan`).
+Kategori pengeluaran: `Makanan`, `Transport`, `Hiburan`, `Belanja`, `Tagihan`, `Kesehatan`, `Pendidikan`, `Lainnya`.
+Kategori pemasukan: `Uang Saku`, `Gaji`, `Bonus`, `Hadiah`, `Lainnya` (kalau kosong otomatis `Pemasukan`).
 
 ## Menyambungkan layanan OCR (untuk AI Developer)
 

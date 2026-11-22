@@ -1,49 +1,36 @@
-# SaveSmart AI - Frontend
+# SaveSmart AI — Frontend (React + Vite)
 
-React + Vite, responsif: tampilan web (sidebar kiri) di layar lebar, tampilan ponsel (menu bawah) di layar kecil.
-Folder ini untuk dimasukkan ke `frontend/` di repository `ManajemenProyek-Kelompok2` (branch `Frontend`).
+Aplikasi web desktop dengan sidebar kiri, palet hijau zamrud, dan 20 alur layar sesuai desain.
 
 ## Menjalankan
-
 ```bash
+cd Frontend
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # hasil ke dist/
+cp .env.example .env     # opsional, default http://localhost:4000
+npm run dev              # http://localhost:5173
 ```
+Belum punya Backend? Jalankan mock API (tanpa dependensi) di terminal lain:
+```bash
+npm run mock             # http://localhost:4000  — akun demo: demo@savesmart.ai / password123
+```
+Backend perlu mengaktifkan **CORS** untuk origin `http://localhost:5173`.
 
 ## Struktur
+| File | Isi |
+|---|---|
+| `src/api.js` | Klien REST + normalizer respons. **Kontrak endpoint ada di komentar atas file.** |
+| `src/store.jsx` | Sesi (token), router hash, toast, badge notifikasi, hook `useFetch` |
+| `src/format.js` | Format Rupiah/tanggal, status anggaran, hitung rencana target |
+| `src/ui.jsx` | Layout (sidebar + topbar), ikon, tombol, form, modal |
+| `screens/Auth.jsx` | 1. Masuk · 2. Daftar |
+| `screens/Main.jsx` | 3. Beranda · 4. Laporan Keuangan (Minggu/Bulan/Tahun) · 5. Notifikasi |
+| `screens/Scan.jsx` | 6. Scan Struk · 7. Konfirmasi · 8. Struk Tidak Terbaca · 9. Input Manual Pengeluaran · 10. Input Manual Pemasukan · 11. Transaksi Tersimpan |
+| `screens/Budget.jsx` | 12. Anggaran Bulanan · 13. Edit Anggaran (ambang 70/80/90%) |
+| `screens/Goals.jsx` | 14. Target Tabungan · 15. Detail + Riwayat Setoran · 16. Tambah Target · 17. Edit Target · 18. Setor Tabungan · 19. Nonaktifkan Target |
+| `screens/Profile.jsx` | 20. Profil & Logout |
 
-```
-src/
-  App.jsx            routing (HashRouter) + proteksi login
-  store.jsx          state global (localStorage), semua aksi: transaksi, anggaran, target, notifikasi
-  data.js            data dummy sesuai angka di Figma
-  ui.jsx             komponen bersama: BottomNav, Progress, Sheet, MoneyInput, ikon
-  styles.css         seluruh styling (token warna di :root)
-  services/ocr.js    MOCK AI Vision -> ganti dengan layanan di ocr/ai-service
-  screens/
-    Auth.jsx         Splash, Welcome, Login, Daftar
-    Main.jsx         Beranda, Laporan, Notifikasi
-    Scan.jsx         Scan, Konfirmasi, Gagal Baca, Tersimpan, Input Manual
-    Budget.jsx       Anggaran Bulanan, Atur Anggaran, Modal Anggaran Terlampaui
-    Goals.jsx        Target Tabungan, Buat Target, Detail Target, Profil
-```
-
-## Alur layar
-
-Splash -> Masuk (atau Daftar) -> Beranda. Halaman Welcome (pengenalan fitur) bisa dibuka dari tautan di halaman Masuk.
-Beranda -> Laporan, Notifikasi, Scan, Anggaran, Target, Profil (navigasi bawah).
-Scan -> (membaca) -> Konfirmasi -> Tersimpan, atau -> Gagal Baca -> Scan Ulang / Input Manual.
-Anggaran -> Atur Anggaran. Notifikasi "Anggaran Hiburan terlampaui" membuka modal peringatan.
-Target -> Buat Target Baru, atau Detail Target -> Setor Tabungan.
-
-## Yang masih perlu disambungkan ke backend
-
-Cari komentar `TODO(backend)` dan `TODO(ai-service)`:
-
-- Login/daftar (`store.jsx`, `screens/Auth.jsx`) - sekarang hanya validasi form lalu simpan ke localStorage.
-- Semua data (`data.js`) - sekarang dummy.
-- OCR struk (`services/ocr.js`) - sekarang mengembalikan hasil palsu setelah 2,4 detik.
-  Tombol "Demo: simulasikan struk tidak terbaca" di layar Scan hanya untuk mencoba layar error.
-
-Menu Profil > "Reset data demo" mengembalikan data ke kondisi awal.
+## Catatan kontrak API
+Desain tidak menyertakan spesifikasi Backend, jadi endpoint di `src/api.js` adalah asumsi
+(`/auth/login`, `/summary`, `/transactions`, `/receipts/scan`, `/reports?period=`, `/budgets`, `/goals`, `/notifications`, …).
+Jika Backend Anda berbeda, cukup ubah path/field di `api.js` — layar tidak perlu diubah.
+Struk tidak terbaca = respons HTTP **422** dari `/receipts/scan`.

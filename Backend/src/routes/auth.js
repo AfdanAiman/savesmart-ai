@@ -44,6 +44,12 @@ router.post('/login', validate(loginSchema), wrap(async (req, res) => {
   res.json({ token: signToken(row.id), user: publicUser(row) })
 }))
 
+// Belum ada layanan email: endpoint ini hanya menjawab seragam supaya status akun tidak bocor.
+// TODO (tim Backend): kirim tautan reset lewat email bila layanan email sudah tersedia.
+router.post('/forgot-password', validate(z.object({ email })), (_req, res) => {
+  res.status(202).json({ ok: true, message: 'Jika email terdaftar, petunjuk reset akan dikirim.' })
+})
+
 router.get('/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }))
 
 export default router

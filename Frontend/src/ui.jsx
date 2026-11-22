@@ -1,163 +1,272 @@
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react';
+import { useStore } from './store.jsx';
+import { amountInput, initials, monthKeyLabel, parseAmount } from './format.js';
 
-// ---------- helpers ----------
-export const rp = (n) => (n < 0 ? '-' : '') + 'Rp ' + Math.abs(Math.round(n)).toLocaleString('id-ID')
-export const pctOf = (a, b) => (b > 0 ? Math.round((a / b) * 100) : 0)
-export const toDigits = (s) => Number(String(s).replace(/\D/g, '')) || 0
-
-// ---------- ikon ----------
-const PATHS = {
-  home: <path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z" />,
-  budget: (<><path d="M21 12A9 9 0 1 1 12 3v9z" /><path d="M15 3.5A9 9 0 0 1 20.5 9H15z" /></>),
-  scan: <path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M7 12h10" />,
-  target: (<><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" /></>),
-  user: (<><circle cx="12" cy="8" r="4" /><path d="M20 21a8 8 0 0 0-16 0" /></>),
-  image: (<><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="9" cy="10" r="1.6" /><path d="M21 16l-5-5-8 8" /></>),
-  pencil: <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />,
-  check: <path d="M5 13l4 4L19 7" />,
-}
-
-export function Icon({ name, size = 22 }) {
+/* ---------------- Ikon ---------------- */
+const ICONS = {
+  home: 'M3 11l9-8 9 8M5 9.5V20h5v-6h4v6h5V9.5',
+  budget: 'M4 5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1zM4 10h16M10 10v10',
+  scan: 'M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M8 12h8',
+  target: 'M12 21a9 9 0 1 1 0-18 9 9 0 0 1 0 18zM12 16.5a4.5 4.5 0 1 1 0-9 4.5 4.5 0 0 1 0 9zM12 12.5v-.01',
+  user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21c0-4 3.6-7 8-7s8 3 8 7',
+  chart: 'M5 20V11M12 20V4M19 20v-6',
+  bell: 'M6 16v-5a6 6 0 1 1 12 0v5l2 2H4zM10 21h4',
+  logout: 'M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4M16 8l4 4-4 4M20 12H9',
+  plus: 'M12 5v14M5 12h14',
+  right: 'M5 12h14M13 6l6 6-6 6',
+  left: 'M19 12H5M11 6l-6 6 6 6',
+  up: 'M7 17L17 7M8 7h9v9',
+  down: 'M17 7L7 17M16 17H7V8',
+  check: 'M5 12.5l4.5 4.5L19 7',
+  alert: 'M12 7v6M12 17.5v.01',
+  pause: 'M9 6v12M15 6v12',
+  chevL: 'M15 6l-6 6 6 6',
+  chevR: 'M9 6l6 6-6 6',
+  upload: 'M12 16V4M7 9l5-5 5 5M4 20h16',
+  camera: 'M4 8h3l2-3h6l2 3h3v12H4zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z',
+  download: 'M12 4v12M7 11l5 5 5-5M4 20h16',
+  spark: 'M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2z',
+};
+export function Icon({ name, size = 18, stroke = 1.8 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      {PATHS[name]}
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={ICONS[name]} />
     </svg>
-  )
+  );
 }
 
-// ---------- komponen kecil ----------
-export function BackLink({ to, light }) {
-  const nav = useNavigate()
+/* ---------------- Elemen dasar ---------------- */
+export function Button({ variant = 'primary', icon, iconRight, loading, children, className = '', ...rest }) {
   return (
-    <button type="button" className={'back' + (light ? ' light' : '')} onClick={() => (to ? nav(to) : nav(-1))}>
-      &lt; Kembali
-    </button>
-  )
-}
-
-export function Progress({ pct, color = 'var(--green)', track, height = 8 }) {
-  return (
-    <div className="progress" style={{ height, background: track }}>
-      <div style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: color }} />
-    </div>
-  )
-}
-
-export function Logo({ size = 60, dark }) {
-  return (
-    <div className={'logo' + (dark ? ' dark' : '')} style={{ width: size, height: size, fontSize: size * 0.45 }}>
-      S
-    </div>
-  )
-}
-
-export function MoneyInput({ value, onChange, placeholder }) {
-  return (
-    <input
-      className="input"
-      inputMode="numeric"
-      placeholder={placeholder}
-      value={value ? 'Rp ' + value.toLocaleString('id-ID') : ''}
-      onChange={(e) => onChange(toDigits(e.target.value))}
-    />
-  )
-}
-
-export function Field({ label, error, children }) {
-  return (
-    <label className="field">
-      <span className="label">{label}</span>
+    <button className={`btn btn-${variant} ${className}`} disabled={loading || rest.disabled} {...rest}>
+      {loading ? <span className="spinner sm" /> : icon && <Icon name={icon} size={16} />}
       {children}
-      {error && <span className="err">{error}</span>}
-    </label>
-  )
+      {iconRight && !loading && <Icon name={iconRight} size={16} />}
+    </button>
+  );
 }
 
-export function Sheet({ children, onClose }) {
+export const Badge = ({ tone = 'green', children, className = '' }) => (
+  <span className={`badge badge-${tone} ${className}`}>{children}</span>
+);
+
+export function Progress({ value, tone = 'green', dark = false }) {
+  const v = Math.max(0, Math.min(100, value || 0));
   return (
-    <div className="overlay" onClick={onClose} role="dialog" aria-modal="true">
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
-        {children}
+    <div className={`progress ${dark ? 'on-dark' : ''}`}>
+      <div className={`progress-bar tone-${tone}`} style={{ width: `${v}%` }} />
+    </div>
+  );
+}
+
+export function Field({ label, hint, error, children, className = '' }) {
+  return (
+    <label className={`field ${className}`}>
+      {label && <span className="field-label">{label}</span>}
+      {children}
+      {error ? <span className="field-error">{error}</span> : hint && <span className="field-hint">{hint}</span>}
+    </label>
+  );
+}
+
+export const Input = (props) => <input className="input" {...props} />;
+
+export function MoneyInput({ value, onChange, ...rest }) {
+  return (
+    <input className="input" inputMode="numeric" placeholder="Rp 0" value={amountInput(value)}
+      onChange={(e) => onChange(parseAmount(e.target.value))} {...rest} />
+  );
+}
+
+export function Select({ value, onChange, options, ...rest }) {
+  return (
+    <div className="select-wrap">
+      <select className="input" value={value} onChange={(e) => onChange(e.target.value)} {...rest}>
+        {options.map((o) => {
+          const opt = typeof o === 'object' ? o : { value: o, label: o };
+          return <option key={opt.value} value={opt.value}>{opt.label}</option>;
+        })}
+      </select>
+      <svg className="select-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+    </div>
+  );
+}
+
+export function Segmented({ value, onChange, options, className = '' }) {
+  return (
+    <div className={`segmented ${className}`} role="tablist">
+      {options.map((o) => (
+        <button key={o.value} type="button" role="tab" aria-selected={value === o.value}
+          className={value === o.value ? 'on' : ''} onClick={() => onChange(o.value)}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function Toggle({ checked, onChange, label }) {
+  return (
+    <button type="button" role="switch" aria-checked={checked} aria-label={label}
+      className={`toggle ${checked ? 'on' : ''}`} onClick={() => onChange(!checked)}><span /></button>
+  );
+}
+
+export const Checkbox = ({ checked, onChange, children }) => (
+  <label className="check">
+    <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+    <span className="check-box"><Icon name="check" size={12} stroke={3} /></span>
+    <span>{children}</span>
+  </label>
+);
+
+export const Spinner = () => <span className="spinner" role="status" aria-label="Memuat" />;
+
+export function ErrorBox({ error, onRetry }) {
+  return (
+    <div className="state-box err">
+      <strong>Gagal memuat data</strong>
+      <p>{error?.message || 'Terjadi kesalahan.'}</p>
+      {onRetry && <Button variant="outline" onClick={onRetry}>Coba lagi</Button>}
+    </div>
+  );
+}
+
+// Pembungkus status pemuatan: <Load q={useFetch(...)}>{(data) => ...}</Load>
+export function Load({ q, children }) {
+  if (q.error && !q.data) return <ErrorBox error={q.error} onRetry={q.reload} />;
+  if (q.loading && !q.data) return <div className="state-box"><Spinner /></div>;
+  return q.data ? children(q.data) : null;
+}
+
+export const Empty = ({ title, children }) => (
+  <div className="state-box"><strong>{title}</strong>{children && <p>{children}</p>}</div>
+);
+
+export function Modal({ title, children, onClose, actions }) {
+  useEffect(() => {
+    const k = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title}>
+        <h3>{title}</h3>
+        <div className="modal-body">{children}</div>
+        <div className="modal-actions">{actions}</div>
       </div>
     </div>
-  )
+  );
 }
 
-// ---------- navigasi bawah ----------
-const NAV = [
-  { to: '/home', label: 'Beranda', icon: 'home', match: ['/home', '/report', '/notifications'] },
-  { to: '/budget', label: 'Anggaran', icon: 'budget', match: ['/budget'] },
-  { to: '/scan', label: 'Scan', icon: 'scan', center: true, match: [] },
-  { to: '/target', label: 'Target', icon: 'target', match: ['/target'] },
-  { to: '/profile', label: 'Profil', icon: 'user', match: ['/profile'] },
-]
-
-export function BottomNav() {
-  const { pathname } = useLocation()
+export function LogoutModal() {
+  const { logoutOpen, cancelLogout, logout } = useStore();
+  if (!logoutOpen) return null;
   return (
-    <nav className="bottom-nav" aria-label="Menu utama">
-      {NAV.map((n) => {
-        const active = n.match.some((m) => pathname.startsWith(m))
-        if (n.center) {
-          return (
-            <Link key={n.to} to={n.to} className="nav-scan" aria-label="Scan struk">
-              <span className="nav-scan-btn"><Icon name="scan" size={26} /></span>
-              <span className="nav-label">{n.label}</span>
-            </Link>
-          )
-        }
-        return (
-          <Link key={n.to} to={n.to} className={'nav-item' + (active ? ' active' : '')}>
-            <span className="nav-dot"><Icon name={n.icon} size={20} /></span>
-            <span className="nav-label">{n.label}</span>
-          </Link>
-        )
-      })}
-    </nav>
-  )
+    <Modal title="Keluar dari akun?" onClose={cancelLogout}
+      actions={<>
+        <Button variant="outline" onClick={cancelLogout}>Batal</Button>
+        <Button variant="danger" onClick={logout}>Keluar</Button>
+      </>}>
+      Data keuanganmu tetap tersimpan dan akan muncul lagi saat kamu masuk kembali.
+    </Modal>
+  );
 }
 
-// Sidebar untuk layar lebar (web)
-export function Sidebar() {
-  const { pathname } = useLocation()
-  const items = NAV.filter((n) => !n.center)
-  return (
-    <aside className="sidebar" aria-label="Menu utama">
-      <Link to="/home" className="side-brand">
-        <Logo size={38} />
-        <span>SaveSmart AI</span>
-      </Link>
-      <nav>
-        {items.slice(0, 2).map((n) => (
-          <Link key={n.to} to={n.to} className={'side-item' + (n.match.some((m) => pathname.startsWith(m)) ? ' active' : '')}>
-            <Icon name={n.icon} size={20} />
-            {n.label}
-          </Link>
-        ))}
-        <Link to="/scan" className="side-scan">
-          <Icon name="scan" size={20} />
-          Scan Struk
-        </Link>
-        {items.slice(2).map((n) => (
-          <Link key={n.to} to={n.to} className={'side-item' + (n.match.some((m) => pathname.startsWith(m)) ? ' active' : '')}>
-            <Icon name={n.icon} size={20} />
-            {n.label}
-          </Link>
-        ))}
-      </nav>
-    </aside>
-  )
+export function Toast() {
+  const { toastState } = useStore();
+  if (!toastState) return null;
+  return <div key={toastState.key} className={`toast ${toastState.kind}`} role="status">{toastState.message}</div>;
 }
 
-// Layout untuk layar yang memakai navigasi: sidebar (web) / menu bawah (ponsel)
-export function WithNav() {
+/* ---------------- Tata letak ---------------- */
+export const Logo = ({ light }) => (
+  <div className={`logo ${light ? 'light' : ''}`}>
+    <span className="logo-mark">S</span>
+    <span className="logo-text">SaveSmart<sup>AI</sup></span>
+  </div>
+);
+
+const NAV_MAIN = [
+  { key: 'home', label: 'Beranda', icon: 'home', route: 'home' },
+  { key: 'budget', label: 'Anggaran', icon: 'budget', route: 'budget' },
+  { key: 'scan', label: 'Scan Struk', icon: 'scan', route: 'scan' },
+  { key: 'goals', label: 'Target', icon: 'target', route: 'goals' },
+  { key: 'profile', label: 'Profil', icon: 'user', route: 'profile' },
+];
+
+export function Layout({ active, crumb, children }) {
+  const { user, nav, unread, month, askLogout } = useStore();
+  const item = (it, extra) => (
+    <button key={it.key} className={`nav-item ${active === it.key ? 'on' : ''}`} onClick={() => nav(it.route)}
+      aria-current={active === it.key ? 'page' : undefined}>
+      <Icon name={it.icon} size={19} />
+      <span>{it.label}</span>
+      {extra}
+    </button>
+  );
   return (
-    <div className="shell">
-      <Sidebar />
-      <main className="main">
-        <Outlet />
-      </main>
-      <BottomNav />
+    <div className="app">
+      <aside className="sidebar">
+        <Logo />
+        <div className="nav-caption">KEUANGAN PRIBADI</div>
+        <nav className="nav">
+          {NAV_MAIN.map((it) => item(it))}
+          <div className="nav-sep" />
+          {item({ key: 'report', label: 'Laporan', icon: 'chart', route: 'report' })}
+          {item({ key: 'notifications', label: 'Notifikasi', icon: 'bell', route: 'notifications' },
+            unread > 0 && <span className="nav-count">{unread}</span>)}
+        </nav>
+        <div className="side-tip">
+          <strong>Sedikit demi sedikit, jadi kebiasaan baik.</strong>
+          <span>Mulai dari satu transaksi hari ini.</span>
+        </div>
+        <button className="nav-item logout" onClick={askLogout}><Icon name="logout" size={19} /><span>Keluar</span></button>
+      </aside>
+
+      <div className="main">
+        <header className="topbar">
+          <div className="crumb">Ruang keuangan / {crumb}</div>
+          <div className="top-right">
+            <span className="top-month">{monthKeyLabel(month)}</span>
+            <button className="bell" onClick={() => nav('notifications')} aria-label="Notifikasi">
+              <Icon name="bell" size={19} />{unread > 0 && <i />}
+            </button>
+            <span className="top-sep" />
+            <button className="who" onClick={() => nav('profile')}>
+              <span className="avatar">{initials(user?.name)}</span>
+              <span><strong>{user?.name || 'Pengguna'}</strong><small>Akun pribadi</small></span>
+            </button>
+          </div>
+        </header>
+        <main className="content">{children}</main>
+      </div>
     </div>
-  )
+  );
+}
+
+export function PageHead({ title, subtitle, children }) {
+  return (
+    <div className="page-head">
+      <div><h1>{title}</h1>{subtitle && <p>{subtitle}</p>}</div>
+      {children && <div className="page-actions">{children}</div>}
+    </div>
+  );
+}
+
+export const BackLink = ({ onClick, children }) => (
+  <button className="back-link" onClick={onClick}><Icon name="left" size={14} />{children}</button>
+);
+
+export const Chip = ({ category, color }) => (
+  <span className="chip" style={color ? { '--dot': color } : undefined}>{category}</span>
+);
+
+// Hook kecil untuk state form
+export function useForm(initial) {
+  const [values, setValues] = useState(initial);
+  const set = (k) => (v) => setValues((s) => ({ ...s, [k]: v && v.target ? v.target.value : v }));
+  return [values, set, setValues];
 }

@@ -1,11 +1,11 @@
 import { Router } from 'express'
 import multer from 'multer'
 import { z } from 'zod'
-import { CATEGORIES, config } from '../config.js'
+import { CATEGORIES, INCOME_CATEGORIES, config } from '../config.js'
 import { HttpError, requireAuth, validate, wrap } from '../http.js'
 import { getDb } from '../db/index.js'
-import { listBudgets, upsertBudget } from '../services/budgets.js'
-import { addDeposit, createGoal, getGoal, listGoals } from '../services/goals.js'
+import { deleteBudget, listBudgets, upsertBudget } from '../services/budgets.js'
+import { addDeposit, createGoal, getGoal, listGoals, setGoalStatus, updateGoal } from '../services/goals.js'
 import { listNotifications } from '../services/notify.js'
 import { scanReceipt } from '../services/ocr.js'
 import { seedDemo } from '../services/seed.js'
@@ -22,14 +22,15 @@ const money = (label) =>
     .max(100_000_000_000, `${label} terlalu besar.`)
 const category = z.enum(CATEGORIES, { errorMap: () => ({ message: 'Kategori tidak dikenal.' }) })
 const id = z.coerce.number().int().positive()
+const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'Format bulan YYYY-MM.')
 
 // ---------- ringkasan ----------
-router.get('/summary', (req, res) => res.json(summary(req.user.id)))
+router.get('/summary', validate(z.object({ month: month.optional() }), 'query'), (req, res) => res.json(summary(req.user.id, req.query.month)))
 
 // ---------- transaksi ----------
 const listQuery = z.object({
   limit: z.coerce.number().int().min(1).max(200).default(50),
-  category: z.enum([...CATEGORIES, 'Pemasukan']).optional(),
+  category: z.enum([...new Set([...CATEGORIES, ...INCOME_CATEGORIES, 'Pemasukan'])]).optional(),
   from: z.string().refine(isValidDate, 'Format tanggal YYYY-MM-DD.').optional(),
   to: z.string().refine(isValidDate, 'Format tanggal YYYY-MM-DD.').optional(),
 })
@@ -37,15 +38,18 @@ router.get('/transactions', validate(listQuery, 'query'), (req, res) => {
   res.json({ transactions: listTransactions(req.user.id, req.query) })
 })
 
+const anyCategory = z.enum([...new Set([...CATEGORIES, ...INCOME_CATEGORIES, 'Pemasukan'])], { errorMap: () => ({ message: 'Kategori tidak dikenal.' }) })
 const txSchema = z.object({
   title: z.string().trim().min(1, 'Nama toko / keterangan wajib diisi.').max(100),
   amount: money('Nominal'),
   type: z.enum(['expense', 'income']).default('expense'),
-  category: category.optional(),
+  category: anyCategory.optional(),
   date: z.string().refine(isValidDate, 'Format tanggal YYYY-MM-DD.').optional(),
   source: z.enum(['manual', 'scan']).default('manual'),
+  note: z.string().trim().max(200, 'Catatan maksimal 200 karakter.').default(''),
 }).superRefine((v, ctx) => {
   if (v.type === 'expense' && !v.category) ctx.addIssue({ code: 'custom', path: ['category'], message: 'Kategori wajib dipilih.' })
+  if (v.type === 'expense' && v.category && !CATEGORIES.includes(v.category)) ctx.addIssue({ code: 'custom', path: ['category'], message: 'Kategori pengeluaran tidak dikenal.' })
   if (v.date && v.date > today()) ctx.addIssue({ code: 'custom', path: ['date'], message: 'Tanggal tidak boleh di masa depan.' })
 })
 router.post('/transactions', validate(txSchema), (req, res) => {
@@ -54,19 +58,27 @@ router.post('/transactions', validate(txSchema), (req, res) => {
     title: b.title,
     amount: b.amount,
     type: b.type,
-    category: b.type === 'income' ? 'Pemasukan' : b.category,
+    // Pemasukan boleh memilih sumber (Uang Saku, Gaji, ...); kalau kosong otomatis 'Pemasukan'
+    category: b.type === 'income' ? (b.category && INCOME_CATEGORIES.includes(b.category) ? b.category : 'Pemasukan') : b.category,
     date: b.date ?? today(),
     source: b.source,
+    note: b.note,
   })
   res.status(201).json(result)
 })
 
 // ---------- anggaran ----------
-router.get('/budgets', (req, res) => res.json({ budgets: listBudgets(req.user.id) }))
+router.get('/budgets', validate(z.object({ month: month.optional() }), 'query'), (req, res) => {
+  res.json({ budgets: listBudgets(req.user.id, req.query.month) })
+})
 
 const budgetSchema = z.object({
   limit: money('Batas anggaran'),
   alertAt: z.coerce.number().int().min(50).max(99).default(90),
+})
+router.delete('/budgets/:category', validate(z.object({ category }), 'params'), (req, res) => {
+  if (!deleteBudget(req.user.id, req.params.category)) throw new HttpError(404, 'NOT_FOUND', 'Anggaran tidak ditemukan.')
+  res.json({ ok: true })
 })
 router.put('/budgets/:category', validate(z.object({ category }), 'params'), validate(budgetSchema), (req, res) => {
   const budget = upsertBudget(req.user.id, req.params.category, req.body.limit, req.body.alertAt)
@@ -74,15 +86,30 @@ router.put('/budgets/:category', validate(z.object({ category }), 'params'), val
 })
 
 // ---------- target tabungan ----------
-router.get('/goals', (req, res) => res.json({ goals: listGoals(req.user.id) }))
+router.get('/goals', validate(z.object({ status: z.enum(['active', 'inactive']).optional() }), 'query'), (req, res) => {
+  res.json({ goals: listGoals(req.user.id, req.query.status) })
+})
 
 const goalSchema = z.object({
   name: z.string().trim().min(1, 'Nama target wajib diisi.').max(80),
   target: money('Nominal target'),
-  months: z.coerce.number({ invalid_type_error: 'Jumlah bulan harus berupa angka.' }).int().min(1, 'Minimal 1 bulan.').max(600, 'Maksimal 600 bulan.'),
+  // kosong = target fleksibel (tanpa tenggat)
+  months: z.preprocess((v) => (v === '' || v === 0 ? null : v), z.coerce.number({ invalid_type_error: 'Jumlah bulan harus berupa angka.' }).int().min(1, 'Minimal 1 bulan.').max(600, 'Maksimal 600 bulan.').nullish()),
 })
-router.post('/goals', validate(goalSchema), (req, res) => {
+router.post('/goals', validate(goalSchema.extend({ initialAmount: z.coerce.number().int().min(0, 'Tabungan awal tidak boleh negatif.').max(100_000_000_000).default(0) }).refine((v) => v.initialAmount <= v.target, { path: ['initialAmount'], message: 'Tabungan awal tidak boleh melebihi nominal target.' })), (req, res) => {
   res.status(201).json({ goal: createGoal(req.user.id, req.body) })
+})
+
+router.put('/goals/:id', validate(z.object({ id }), 'params'), validate(goalSchema), (req, res) => {
+  const goal = updateGoal(req.user.id, req.params.id, req.body)
+  if (!goal) throw new HttpError(404, 'NOT_FOUND', 'Target tidak ditemukan.')
+  res.json({ goal })
+})
+
+router.patch('/goals/:id/status', validate(z.object({ id }), 'params'), validate(z.object({ status: z.enum(['active', 'inactive']) })), (req, res) => {
+  const goal = setGoalStatus(req.user.id, req.params.id, req.body.status)
+  if (!goal) throw new HttpError(404, 'NOT_FOUND', 'Target tidak ditemukan.')
+  res.json({ goal })
 })
 
 router.get('/goals/:id', validate(z.object({ id }), 'params'), (req, res) => {
@@ -91,8 +118,12 @@ router.get('/goals/:id', validate(z.object({ id }), 'params'), (req, res) => {
   res.json({ goal })
 })
 
-router.post('/goals/:id/deposits', validate(z.object({ id }), 'params'), validate(z.object({ amount: money('Nominal setoran') })), (req, res) => {
-  const goal = addDeposit(req.user.id, req.params.id, req.body.amount)
+router.post('/goals/:id/deposits', validate(z.object({ id }), 'params'), validate(z.object({
+  amount: money('Nominal setoran'),
+  date: z.string().refine(isValidDate, 'Format tanggal YYYY-MM-DD.').optional(),
+  note: z.string().trim().max(200, 'Catatan maksimal 200 karakter.').default(''),
+}).refine((v) => !v.date || v.date <= today(), { path: ['date'], message: 'Tanggal tidak boleh di masa depan.' })), (req, res) => {
+  const goal = addDeposit(req.user.id, req.params.id, req.body.amount, { date: req.body.date, note: req.body.note })
   if (!goal) throw new HttpError(404, 'NOT_FOUND', 'Target tidak ditemukan.')
   res.status(201).json({ goal })
 })

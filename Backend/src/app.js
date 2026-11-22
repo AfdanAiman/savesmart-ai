@@ -7,6 +7,7 @@ import { getDb } from './db/index.js'
 import { errorHandler, notFound } from './http.js'
 import authRoutes from './routes/auth.js'
 import dataRoutes from './routes/data.js'
+import userRoutes from './routes/users.js'
 
 export function createApp() {
   getDb() // jalankan migrasi sebelum menerima request
@@ -27,6 +28,7 @@ export function createApp() {
     message: { error: 'RATE_LIMITED', message: 'Terlalu banyak percobaan. Coba lagi beberapa menit lagi.' },
   })
   app.use('/api/auth', authLimiter, authRoutes)
+  app.use('/api/users', userRoutes)
   app.use('/api', dataRoutes)
 
   app.use(notFound)

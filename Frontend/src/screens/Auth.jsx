@@ -1,151 +1,135 @@
-import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
-import { Field, Logo } from '../ui.jsx'
-import { useStore } from '../store.jsx'
+import { useState } from 'react';
+import { api } from '../api.js';
+import { useStore } from '../store.jsx';
+import { Button, Checkbox, Field, Input, Logo } from '../ui.jsx';
 
-export function Splash() {
-  const nav = useNavigate()
-  const { state } = useStore()
-  useEffect(() => {
-    const t = setTimeout(() => nav(state.user ? '/home' : '/login', { replace: true }), 1800)
-    return () => clearTimeout(t)
-  }, [nav, state.user])
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function Brand() {
   return (
-    <div className="screen green">
-      <Logo size={82} dark />
-      <div className="splash-name">SaveSmart AI</div>
-      <div className="splash-tag">Kelola uang lebih cerdas</div>
-    </div>
-  )
+    <section className="auth-left">
+      <Logo light />
+      <span className="auth-pill">TEMAN KEUANGAN CERDASMU</span>
+      <h2>Langkah kecil hari ini. Masa depan lebih terencana.</h2>
+      <p>Catat pengeluaran, jaga anggaran, dan wujudkan targetmu dalam satu ruang yang sederhana.</p>
+      <div className="auth-goal">
+        <div className="top"><span>Target Laptop Baru</span><span>35% tercapai</span></div>
+        <div className="amt-big">Rp 4.200.000</div>
+        <div className="sub">dari Rp 12.000.000</div>
+        <div className="progress on-dark"><div className="progress-bar tone-lime" style={{ width: '35%' }} /></div>
+        <div className="sub">Sedikit demi sedikit, impian jadi lebih dekat.</div>
+      </div>
+      <div className="auth-foot"><span>SCAN STRUK AI</span><span>/</span><span>ANGGARAN</span><span>/</span><span>TARGET</span></div>
+    </section>
+  );
 }
 
-const FEATURES = [
-  { letter: 'S', cls: 'av-green', title: 'Smart Receipt Scanner', text: 'Foto struk, data transaksi terisi otomatis oleh AI.' },
-  { letter: 'B', cls: 'av-amber', title: 'Budget Alert', text: 'Dapat peringatan saat pengeluaran melebihi anggaran.' },
-  { letter: 'T', cls: 'av-indigo', title: 'Target Tabungan', text: 'Hitung kebutuhan tabungan bulanan untuk tujuanmu.' },
-]
+export default function Auth() {
+  const { login, toast } = useStore();
+  const [mode, setMode] = useState('login'); // 'login' | 'register'
+  const [form, setForm] = useState({ name: '', email: '', password: '' });
+  const [show, setShow] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [agree, setAgree] = useState(false);
+  const [errors, setErrors] = useState({});
+  const [formError, setFormError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-export function Welcome() {
-  const nav = useNavigate()
+  const isLogin = mode === 'login';
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const switchMode = (m) => { setMode(m); setErrors({}); setFormError(''); setShow(false); };
+
+  const validate = () => {
+    const e = {};
+    if (!isLogin && form.name.trim().length < 2) e.name = 'Nama lengkap wajib diisi.';
+    if (!EMAIL_RE.test(form.email)) e.email = 'Masukkan alamat email yang valid.';
+    if (isLogin ? !form.password : form.password.length < 8) e.password = isLogin ? 'Kata sandi wajib diisi.' : 'Kata sandi minimal 8 karakter.';
+    if (!isLogin && !agree) e.agree = 'Setujui Syarat & Ketentuan untuk melanjutkan.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const submit = async (ev) => {
+    ev.preventDefault();
+    setFormError('');
+    if (!validate()) return;
+    setBusy(true);
+    try {
+      let res;
+      if (isLogin) {
+        res = await api.login({ email: form.email.trim(), password: form.password });
+      } else {
+        const created = await api.register({ name: form.name.trim(), email: form.email.trim(), password: form.password });
+        res = created.token ? created : await api.login({ email: form.email.trim(), password: form.password });
+        if (!res.user.name) res.user.name = form.name.trim();
+      }
+      login(res.token, res.user, isLogin ? remember : true);
+    } catch (err) {
+      setFormError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const forgot = async () => {
+    if (!EMAIL_RE.test(form.email)) {
+      setErrors({ email: 'Isi email dulu, lalu klik "Lupa kata sandi?".' });
+      return;
+    }
+    try { await api.forgotPassword(form.email.trim()); } catch { /* jangan bocorkan status akun */ }
+    toast('Jika email terdaftar, tautan pemulihan telah dikirim.');
+  };
+
   return (
-    <div className="screen center wide">
-      <h1 style={{ marginBottom: 18 }}>Satu aplikasi untuk keuanganmu</h1>
-      <div className="features">
-        {FEATURES.map((f) => (
-          <div key={f.letter} className="card feature">
-            <div className={`avatar ${f.cls}`}>{f.letter}</div>
-            <div>
-              <b>{f.title}</b>
-              <span className="t">{f.text}</span>
+    <div className="auth">
+      <Brand />
+      <section className="auth-right">
+        <form className="auth-form" onSubmit={submit} noValidate>
+          <h1>{isLogin ? 'Selamat datang kembali' : 'Mulai perjalananmu'}</h1>
+          <p>{isLogin ? 'Masuk untuk melanjutkan mengelola keuanganmu.' : 'Buat akun dan kelola uang dengan lebih terarah.'}</p>
+
+          {formError && <div className="form-error" role="alert">{formError}</div>}
+
+          {!isLogin && (
+            <Field label="Nama lengkap" error={errors.name}>
+              <Input value={form.name} onChange={set('name')} placeholder="Nama lengkapmu" autoComplete="name" />
+            </Field>
+          )}
+          <Field label="Email" error={errors.email}>
+            <Input type="email" value={form.email} onChange={set('email')} placeholder="nama@email.com" autoComplete="email" />
+          </Field>
+          <Field label="Kata sandi" error={errors.password}
+            hint={!isLogin ? 'Gunakan kombinasi huruf, angka, dan simbol.' : undefined}>
+            <div className="pw-wrap">
+              <Input type={show ? 'text' : 'password'} value={form.password} onChange={set('password')}
+                placeholder={isLogin ? 'Kata sandimu' : 'Minimal 8 karakter'} autoComplete={isLogin ? 'current-password' : 'new-password'} />
+              <button type="button" className="pw-toggle" onClick={() => setShow((s) => !s)}>{show ? 'Sembunyikan' : 'Tampilkan'}</button>
             </div>
+          </Field>
+
+          {isLogin ? (
+            <div className="auth-row">
+              <Checkbox checked={remember} onChange={setRemember}>Ingat saya</Checkbox>
+              <button type="button" className="link" onClick={forgot}>Lupa kata sandi?</button>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 20 }}>
+              <Checkbox checked={agree} onChange={setAgree}>
+                Saya menyetujui Syarat &amp; Ketentuan serta <b style={{ color: 'var(--brand)' }}>Kebijakan Privasi SaveSmart AI.</b>
+              </Checkbox>
+              {errors.agree && <span className="field-error">{errors.agree}</span>}
+            </div>
+          )}
+
+          <Button type="submit" className="block lg" loading={busy}>{isLogin ? 'Masuk' : 'Daftar'}</Button>
+
+          <div className="auth-alt">
+            {isLogin ? 'Belum punya akun?' : 'Sudah punya akun?'}
+            <button type="button" onClick={() => switchMode(isLogin ? 'register' : 'login')}>{isLogin ? 'Daftar akun baru' : 'Masuk'}</button>
           </div>
-        ))}
-      </div>
-      <button className="btn" style={{ marginTop: 14 }} onClick={() => nav('/register')}>Mulai Sekarang</button>
-      <Link to="/login" className="link">Sudah punya akun? Masuk</Link>
+        </form>
+        <div className="auth-privacy">Data keuanganmu bersifat pribadi dan terlindungi.</div>
+      </section>
     </div>
-  )
-}
-
-function AuthBrand() {
-  return (
-    <div className="auth-brand">
-      <Logo size={56} dark />
-      <h2>SaveSmart AI</h2>
-      <p>Catat pengeluaran dari foto struk, pantau anggaran, dan capai target tabunganmu.</p>
-      <ul>
-        <li>Scan struk otomatis dengan AI Vision</li>
-        <li>Peringatan saat anggaran hampir habis</li>
-        <li>Hitung kebutuhan tabungan per bulan</li>
-      </ul>
-    </div>
-  )
-}
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-
-export function Login() {
-  const nav = useNavigate()
-  const { login } = useStore()
-  const [f, setF] = useState({ email: '', password: '' })
-  const [err, setErr] = useState({})
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
-
-  const submit = (e) => {
-    e.preventDefault()
-    const er = {}
-    if (!EMAIL_RE.test(f.email)) er.email = 'Masukkan email yang valid.'
-    if (f.password.length < 8) er.password = 'Kata sandi minimal 8 karakter.'
-    setErr(er)
-    if (Object.keys(er).length) return
-    // TODO(backend): panggil endpoint login
-    login(f.email)
-    nav('/home', { replace: true })
-  }
-
-  return (
-    <div className="auth">
-    <AuthBrand />
-    <form className="auth-form" onSubmit={submit} noValidate>
-      <div className="auth-logo"><Logo size={60} /></div>
-      <h1 style={{ marginTop: 20 }}>Selamat datang kembali</h1>
-      <p className="sub">Masuk untuk melanjutkan mengelola keuanganmu.</p>
-      <Field label="Email" error={err.email}>
-        <input className="input" type="email" placeholder="nama@email.com" value={f.email} onChange={set('email')} autoComplete="email" />
-      </Field>
-      <Field label="Kata sandi" error={err.password}>
-        <input className="input" type="password" placeholder="········" value={f.password} onChange={set('password')} autoComplete="current-password" />
-      </Field>
-      <div className="form-actions">
-        <button className="btn" type="submit">Masuk</button>
-        <button className="btn outline" type="button" onClick={() => nav('/register')}>Daftar akun baru</button>
-      </div>
-      <Link to="/welcome" className="link">Kenali fitur SaveSmart AI</Link>
-    </form>
-    </div>
-  )
-}
-
-export function Register() {
-  const nav = useNavigate()
-  const { login } = useStore()
-  const [f, setF] = useState({ name: '', email: '', password: '' })
-  const [err, setErr] = useState({})
-  const set = (k) => (e) => setF({ ...f, [k]: e.target.value })
-
-  const submit = (e) => {
-    e.preventDefault()
-    const er = {}
-    if (!f.name.trim()) er.name = 'Nama lengkap wajib diisi.'
-    if (!EMAIL_RE.test(f.email)) er.email = 'Masukkan email yang valid.'
-    if (f.password.length < 8) er.password = 'Kata sandi minimal 8 karakter.'
-    setErr(er)
-    if (Object.keys(er).length) return
-    // TODO(backend): panggil endpoint register
-    login(f.email, f.name.trim())
-    nav('/home', { replace: true })
-  }
-
-  return (
-    <div className="auth">
-    <AuthBrand />
-    <form className="auth-form" onSubmit={submit} noValidate>
-      <h1>Buat akun baru</h1>
-      <p className="sub">Mulai catat pengeluaran dan capai target tabunganmu.</p>
-      <Field label="Nama lengkap" error={err.name}>
-        <input className="input" placeholder="Abdullah Duwi Putro" value={f.name} onChange={set('name')} autoComplete="name" />
-      </Field>
-      <Field label="Email" error={err.email}>
-        <input className="input" type="email" placeholder="nama@email.com" value={f.email} onChange={set('email')} autoComplete="email" />
-      </Field>
-      <Field label="Kata sandi" error={err.password}>
-        <input className="input" type="password" placeholder="Minimal 8 karakter" value={f.password} onChange={set('password')} autoComplete="new-password" />
-      </Field>
-      <div className="form-actions">
-        <button className="btn" type="submit">Daftar</button>
-      </div>
-      <Link to="/login" className="link">Sudah punya akun? Masuk</Link>
-    </form>
-    </div>
-  )
+  );
 }

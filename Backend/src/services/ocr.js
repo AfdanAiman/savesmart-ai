@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { config } from '../config.js'
+import { CATEGORIES, config } from '../config.js'
 import { today } from '../util.js'
 
 import { HttpError } from '../http.js'
@@ -12,7 +12,7 @@ const OcrError = (code, message, status) => new HttpError(status, code, message)
 const resultSchema = z.object({
   store: z.string().min(1),
   date: z.string().optional(),
-  category: z.enum(['Makanan', 'Transport', 'Hiburan', 'Lainnya']).optional(),
+  category: z.enum(CATEGORIES).optional(),
   accuracy: z.number().min(0).max(100).optional(),
   items: z.array(z.object({ name: z.string(), price: z.number().nonnegative() })).default([]),
   total: z.number().positive().optional(),

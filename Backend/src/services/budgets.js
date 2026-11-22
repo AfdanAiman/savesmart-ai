@@ -20,9 +20,15 @@ export function budgetStatus(userId, category) {
   return row ? shape(row, spentInMonth(userId, category)) : null
 }
 
-export function listBudgets(userId) {
+// month = 'YYYY-MM' (opsional, default bulan ini): hanya menentukan bulan untuk menghitung pengeluaran.
+export function listBudgets(userId, month) {
   const rows = getDb().prepare('SELECT * FROM budgets WHERE user_id = ? ORDER BY rowid').all(userId)
-  return rows.map((r) => shape(r, spentInMonth(userId, r.category)))
+  const date = month ? `${month}-01` : today()
+  return rows.map((r) => shape(r, spentInMonth(userId, r.category, date)))
+}
+
+export function deleteBudget(userId, category) {
+  return getDb().prepare('DELETE FROM budgets WHERE user_id = ? AND category = ?').run(userId, category).changes > 0
 }
 
 export function upsertBudget(userId, category, limit, alertAt) {
