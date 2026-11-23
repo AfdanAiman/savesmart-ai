@@ -13,7 +13,7 @@ if (isProd && !process.env.JWT_SECRET) {
 
 export const config = {
   isProd,
-  port: Number(process.env.PORT),
+  port: Number(process.env.PORT) || 4000,
   jwtSecret: process.env.JWT_SECRET,
   jwtExpires: process.env.JWT_EXPIRES || '7d',
   corsOrigins: String(process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:4173')
@@ -28,9 +28,9 @@ export const config = {
   migrationsDir: process.env.MIGRATIONS_DIR || path.resolve(root, '..', 'Database', 'migrations'),
   seedOnRegister: (process.env.SEED_ON_REGISTER ?? 'true') === 'true',
   ocrMode: process.env.OCR_MODE || 'mock',
-  ocrUrl: process.env.OCR_SERVICE_URL || 'https://openrouter.ai/api/v1/chat/completions',
-  aiApiKey: process.env.OPENROUTER_API_KEY || '',
-  aiModel: process.env.OPENROUTER_MODEL || 'qwen/qwen2.5-vl-72b-instruct:free',
+  ocrUrl: process.env.OCR_SERVICE_URL || 'https://generativelanguage.googleapis.com/v1beta/models',
+  aiApiKey: process.env.GEMINI_API_KEY || '',
+  aiModel: process.env.GEMINI_MODEL || 'gemini-3.8-flash',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 8,
 }
 
