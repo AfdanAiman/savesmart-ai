@@ -12,11 +12,11 @@ const MOCK_RESULT = {
   rawText: 'INDOMARET POINT - TOTAL RP 45.500',
 }
 
-const FREE_VISION_MODELS = [
-  'qwen/qwen2.5-vl-72b-instruct:free',
-  'qwen/qwen2.5-vl-32b-instruct:free',
-  'meta-llama/llama-3.2-11b-vision-instruct:free',
-  'google/gemma-3-27b-it:free',
+// Daftar model Gemini Multimodal berurutan dari yang paling stabil & cepat
+const GEMINI_MODELS = [
+  'gemini-3.5-flash',
+  'gemini-3.8-flash',
+  'gemini-3.5-pro',
 ]
 
 export async function scanReceipt({ file, simulateFail = false }) {
@@ -33,10 +33,9 @@ export async function scanReceipt({ file, simulateFail = false }) {
 
   const apiKey = String(config.aiApiKey || '').trim()
   if (!apiKey) {
-    throw new HttpError(500, 'OCR_CONFIG_ERROR', 'OPENROUTER_API_KEY belum diatur di server.')
+    throw new HttpError(500, 'OCR_CONFIG_ERROR', 'GEMINI_API_KEY belum diatur di server.')
   }
 
-  // Perkecil resolusi foto struk (maks lebar 1024px) agar payload ringan & tidak diputus Cloudflare/OpenRouter
   const compressedBuffer = await sharp(file.buffer)
     .rotate()
     .resize({ width: 1024, withoutEnlargement: true })
@@ -44,7 +43,6 @@ export async function scanReceipt({ file, simulateFail = false }) {
     .toBuffer()
 
   const base64Image = compressedBuffer.toString('base64')
-  const dataUrl = `data:image/jpeg;base64,${base64Image}`
 
   const prompt = `Kamu adalah sistem ekstraksi struk belanja Indonesia. Analisis gambar struk ini dan kembalikan HANYA objek JSON valid tanpa markdown atau teks tambahan.
 Format wajib:
@@ -58,49 +56,47 @@ Aturan:
 - "amount" wajib berupa angka bulat (integer) dalam Rupiah tanpa titik/koma (contoh: 45500).
 - Jika gambar bukan struk belanja atau sama sekali tidak terbaca, kembalikan {"error": "UNREADABLE"}.`
 
-  const candidates = [...new Set([config.aiModel, ...FREE_VISION_MODELS])].filter(Boolean)
+  // Bersihkan base URL jika terlanjur berisi akhiran /:generateContent
+  const baseUrl = config.ocrUrl.replace(/\/[^/]+:generateContent$/, '').replace(/\/$/, '')
+  const candidates = [...new Set([...GEMINI_MODELS, config.aiModel])].filter(Boolean)
 
   let data = null
   let lastError = ''
 
   for (const modelName of candidates) {
+    const endpoint = `${baseUrl}/${modelName}:generateContent?key=${encodeURIComponent(apiKey)}`
+
     try {
-      const response = await fetch(config.ocrUrl, {
+      const response = await fetch(endpoint, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-          'HTTP-Referer': 'http://localhost:5173',
-          'X-Title': 'SaveSmart AI',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          model: modelName,
-          messages: [
+          contents: [
             {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                { type: 'image_url', image_url: { url: dataUrl } },
+              parts: [
+                { text: prompt },
+                { inline_data: { mime_type: 'image/jpeg', data: base64Image } },
               ],
             },
           ],
-          max_tokens: 300,
-          temperature: 0.1,
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+          },
         }),
       })
 
       if (response.ok) {
         data = await response.json()
-        console.log(`OCR OpenRouter berhasil diproses dengan model: ${modelName}`)
+        console.log(`OCR Gemini berhasil diproses dengan model: ${modelName}`)
         break
       }
 
       lastError = await response.text()
-      console.warn(`Model OpenRouter ${modelName} dilewati (${response.status}):`, lastError)
+      console.warn(`Model Gemini ${modelName} dilewati (${response.status}):`, lastError)
 
-      // Jika API key salah (401), langsung hentikan loop tanpa mencoba model berikutnya
-      if (response.status === 401) {
-        throw new HttpError(502, 'OCR_AUTH_ERROR', 'API Key OpenRouter tidak valid (User not found). Periksa OPENROUTER_API_KEY di .env.')
+      if (response.status === 403 || lastError.includes('API_KEY_INVALID')) {
+        throw new HttpError(502, 'OCR_AUTH_ERROR', 'GEMINI_API_KEY tidak valid. Periksa kembali key di .env.')
       }
     } catch (err) {
       if (err instanceof HttpError) throw err
@@ -110,22 +106,32 @@ Aturan:
   }
 
   if (!data) {
-    console.error('Semua model Vision gratis OpenRouter gagal:', lastError)
-    throw new HttpError(502, 'OCR_PROVIDER_ERROR', 'Layanan AI pemindai struk sedang sibuk atau tidak tersedia.')
+    console.error('Semua model Gemini gagal:', lastError)
+    throw new HttpError(502, 'OCR_PROVIDER_ERROR', 'Layanan AI pemindai struk sedang sibuk, coba lagi sebentar.')
   }
 
-  const rawContent = data.choices?.[0]?.message?.content?.trim() || ''
+  const rawContent = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+  console.log('Raw response dari Gemini:', rawContent)
+
   const cleanJson = rawContent.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim()
 
   let parsed
   try {
     parsed = JSON.parse(cleanJson)
+    if (Array.isArray(parsed)) {
+      parsed = parsed[0] || {}
+    }
   } catch {
-    console.error('Gagal parse JSON dari OpenRouter:', rawContent)
+    console.error('Gagal parse JSON dari Gemini:', rawContent)
     throw new HttpError(422, 'OCR_PARSE_ERROR', 'Hasil pembacaan AI tidak valid, silakan input manual.')
   }
 
-  if (parsed.error === 'UNREADABLE' || !parsed.amount || Number(parsed.amount) <= 0) {
+  const cleanAmount = typeof parsed.amount === 'string'
+    ? Number(parsed.amount.replace(/[^\d]/g, ''))
+    : Number(parsed.amount)
+
+  if (parsed.error === 'UNREADABLE' || !cleanAmount || cleanAmount <= 0) {
+    console.warn('Validasi OCR gagal, hasil parsed:', parsed)
     throw new HttpError(422, 'OCR_FAILED', 'Struk tidak terbaca dengan jelas, pastikan foto fokus dan terang.')
   }
 
@@ -134,9 +140,9 @@ Aturan:
 
   return {
     title: String(parsed.title || 'Transaksi Struk').slice(0, 100),
-    amount: Math.round(Number(parsed.amount)),
+    amount: Math.round(cleanAmount),
     category: validCategory,
     date: validDate,
-    confidence: 0.92,
+    confidence: 0.95,
   }
 }

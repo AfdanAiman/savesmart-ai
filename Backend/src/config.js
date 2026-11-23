@@ -27,10 +27,10 @@ export const config = {
   },
   migrationsDir: process.env.MIGRATIONS_DIR || path.resolve(root, '..', 'Database', 'migrations'),
   seedOnRegister: (process.env.SEED_ON_REGISTER ?? 'true') === 'true',
-  ocrMode: process.env.OCR_MODE || 'mock',
-  ocrUrl: process.env.OCR_SERVICE_URL || 'https://openrouter.ai/api/v1/chat/completions',
-  aiApiKey: process.env.OPENROUTER_API_KEY || '',
-  aiModel: process.env.OPENROUTER_MODEL || 'qwen/qwen2.5-vl-72b-instruct:free',
+  ocrMode: process.env.OCR_MODE,
+  ocrUrl: process.env.OCR_SERVICE_URL,
+  aiApiKey: process.env.GEMINI_API_KEY || '',
+  aiModel: process.env.GEMINI_MODEL,
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 8,
 }
 
