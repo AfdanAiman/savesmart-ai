@@ -1,13 +1,11 @@
-
 import sharp from 'sharp'
 import { CATEGORIES, config } from '../config.js'
 import { HttpError } from '../http.js'
 import { today } from '../util.js'
 
 const FALLBACK_MODELS = [
-  'gemini-3.5-flash',
   'gemini-3.8-flash',
-  'gemini-3.5-pro',
+  'gemini-3.5-flash-lite',
 ]
 
 const sleep = (ms) =>
@@ -47,14 +45,9 @@ function extractJSON(content) {
 }
 
 export async function scanReceipt({ file, simulateFail = false }) {
-
   // 1. Validasi file
   if (!file) {
-    throw new HttpError(
-      400,
-      'NO_FILE',
-      'Foto struk wajib diunggah.'
-    )
+    throw new HttpError(400, 'NO_FILE', 'Foto struk wajib diunggah.')
   }
 
   if (simulateFail) {
@@ -84,21 +77,20 @@ export async function scanReceipt({ file, simulateFail = false }) {
     )
   }
 
-  // 3. Optimasi gambar
+  // 3. Optimasi gambar (1024px jauh lebih cepat dikirim tanpa mengurangi keterbacaan teks struk)
   let compressedBuffer
 
   try {
     compressedBuffer = await sharp(file.buffer)
       .rotate()
       .resize({
-        width: 1600,
-        height: 1600,
+        width: 1024,
+        height: 1024,
         fit: 'inside',
         withoutEnlargement: true,
       })
-      .jpeg({ quality: 85 })
+      .jpeg({ quality: 80 })
       .toBuffer()
-
   } catch (err) {
     console.error('Gagal memproses gambar:', err.message)
 
@@ -146,24 +138,15 @@ ATURAN PENTING:
   // 5. Konfigurasi respons Gemini
   const generationConfig = {
     temperature: 0,
-    maxOutputTokens: 1024,
+    maxOutputTokens: 512,
     responseMimeType: 'application/json',
     responseSchema: {
       type: 'OBJECT',
       properties: {
-        title: {
-          type: 'STRING',
-        },
-        amount: {
-          type: 'INTEGER',
-        },
-        category: {
-          type: 'STRING',
-          enum: CATEGORIES,
-        },
-        date: {
-          type: 'STRING',
-        },
+        title: { type: 'STRING' },
+        amount: { type: 'INTEGER' },
+        category: { type: 'STRING', enum: CATEGORIES },
+        date: { type: 'STRING' },
       },
       required: ['title', 'amount', 'category', 'date'],
     },
@@ -171,47 +154,35 @@ ATURAN PENTING:
 
   // 6. Daftar model Gemini
   const baseUrl = String(
-    config.ocrUrl ||
-    'https://generativelanguage.googleapis.com/v1beta/models'
+    config.ocrUrl || 'https://generativelanguage.googleapis.com/v1beta/models'
   )
     .replace(/\/$/, '')
     .replace(/\/[^/]+:generateContent$/, '')
 
   const candidates = [
-    ...new Set([
-      config.aiModel,
-      ...FALLBACK_MODELS,
-    ].filter(Boolean)),
+    ...new Set([config.aiModel, ...FALLBACK_MODELS].filter(Boolean)),
   ]
 
   let parsed = null
   let lastError = ''
 
-  // 7. Gọi API Gemini
+  // 7. Panggil API Gemini
   for (const modelName of candidates) {
-
     let modelSucceeded = false
 
     for (let attempt = 1; attempt <= 2; attempt++) {
-
       try {
-        console.log(
-          `OCR: thử model ${modelName}, lần ${attempt}/2`
-        )
+        console.log(`OCR: mencoba model ${modelName}, percobaan ${attempt}/2`)
 
-        const endpoint =
-          `${baseUrl}/${encodeURIComponent(modelName)}:generateContent`
+        const endpoint = `${baseUrl}/${encodeURIComponent(modelName)}:generateContent`
 
         const response = await fetch(endpoint, {
           method: 'POST',
-
           headers: {
             'Content-Type': 'application/json',
             'x-goog-api-key': apiKey,
           },
-
-          signal: AbortSignal.timeout(30000),
-
+          signal: AbortSignal.timeout(15000),
           body: JSON.stringify({
             contents: [
               {
@@ -226,13 +197,11 @@ ATURAN PENTING:
                 ],
               },
             ],
-
             generationConfig,
           }),
         })
 
         if (!response.ok) {
-
           lastError = await response.text()
 
           console.error(
@@ -240,10 +209,7 @@ ATURAN PENTING:
             lastError.slice(0, 1000)
           )
 
-          if (
-            response.status === 401 ||
-            response.status === 403
-          ) {
+          if (response.status === 401 || response.status === 403) {
             throw new HttpError(
               502,
               'OCR_AUTH_ERROR',
@@ -252,8 +218,7 @@ ATURAN PENTING:
           }
 
           if (
-            (response.status === 429 ||
-              response.status === 503) &&
+            (response.status === 429 || response.status === 503) &&
             attempt < 2
           ) {
             await sleep(1000 * attempt)
@@ -264,7 +229,6 @@ ATURAN PENTING:
         }
 
         const data = await response.json()
-
         const candidate = data.candidates?.[0]
 
         if (!candidate) {
@@ -277,14 +241,10 @@ ATURAN PENTING:
           break
         }
 
-        const rawContent = (
-          candidate.content?.parts || []
-        )
+        const rawContent = (candidate.content?.parts || [])
           .map((part) => part.text || '')
           .join('')
           .trim()
-
-        console.log(`Respons OCR diterima dari ${modelName}`)
 
         parsed = extractJSON(rawContent)
 
@@ -295,23 +255,15 @@ ATURAN PENTING:
         }
 
         modelSucceeded = true
-
         console.log(`OCR berhasil menggunakan ${modelName}`)
-
         break
-
       } catch (err) {
-
         if (err instanceof HttpError) {
           throw err
         }
 
         lastError = err.message
-
-        console.warn(
-          `Gemini ${modelName} gagal:`,
-          lastError
-        )
+        console.warn(`Gemini ${modelName} gagal:`, lastError)
 
         if (attempt < 2) {
           await sleep(1000 * attempt)
@@ -322,10 +274,7 @@ ATURAN PENTING:
     if (modelSucceeded) break
 
     parsed = null
-
-    console.warn(
-      `Beralih ke model berikutnya setelah ${modelName} gagal.`
-    )
+    console.warn(`Beralih ke model berikutnya setelah ${modelName} gagal.`)
   }
 
   // 8. Jika semua model gagal
@@ -355,9 +304,7 @@ ATURAN PENTING:
     )
   }
 
-  const title = String(
-    parsed.title || 'Transaksi Struk'
-  )
+  const title = String(parsed.title || 'Transaksi Struk')
     .trim()
     .slice(0, 100)
 
@@ -368,8 +315,7 @@ ATURAN PENTING:
   const currentDate = today()
 
   const validDate =
-    isValidISODate(parsed.date) &&
-    parsed.date <= currentDate
+    isValidISODate(parsed.date) && parsed.date <= currentDate
       ? parsed.date
       : currentDate
 

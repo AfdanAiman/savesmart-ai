@@ -3,7 +3,9 @@ import { query } from '../db/index.js'
 // dedupeKey mencegah notifikasi yang sama dibuat dua kali (mis. anggaran yang sama di bulan yang sama).
 export async function notify(userId, { kind, title, body, link, dedupeKey = null }) {
   const r = await query(
-    'INSERT IGNORE INTO notifications (user_id, kind, title, body, link, dedupe_key) VALUES (?,?,?,?,?,?)',
+    `INSERT INTO notifications (user_id, kind, title, body, link, dedupe_key)
+     VALUES (?,?,?,?,?,?)
+     ON CONFLICT (user_id, dedupe_key) DO NOTHING`,
     [userId, kind, title, body, link, dedupeKey]
   )
   return r.affectedRows > 0

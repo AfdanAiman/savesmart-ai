@@ -1,4 +1,3 @@
-
 import 'dotenv/config'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -9,9 +8,11 @@ const root = path.resolve(here, '..')
 const isProd = process.env.NODE_ENV === 'production'
 
 if (isProd && !process.env.JWT_SECRET) {
-  throw new Error(
-    'JWT_SECRET wajib diisi saat NODE_ENV=production'
-  )
+  throw new Error('JWT_SECRET wajib diisi saat NODE_ENV=production')
+}
+
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL wajib diisi di file .env')
 }
 
 export const config = {
@@ -25,18 +26,14 @@ export const config = {
 
   corsOrigins: String(
     process.env.CORS_ORIGINS ||
-    'http://localhost:5173,http://localhost:4173'
+      'http://localhost:5173,http://localhost:4173'
   )
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean),
 
   db: {
-    host: process.env.DB_HOST || '127.0.0.1',
-    port: Number(process.env.DB_PORT) || 3306,
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD ?? '',
-    database: process.env.DB_NAME || 'savesmart_ai',
+    url: process.env.DATABASE_URL,
   },
 
   migrationsDir:

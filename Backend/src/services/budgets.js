@@ -38,7 +38,9 @@ export async function deleteBudget(userId, category) {
 export async function upsertBudget(userId, category, limit, alertAt) {
   await query(
     `INSERT INTO budgets (user_id, category, limit_amount, alert_at) VALUES (?,?,?,?)
-     ON DUPLICATE KEY UPDATE limit_amount = VALUES(limit_amount), alert_at = VALUES(alert_at)`,
+     ON CONFLICT (user_id, category) DO UPDATE SET
+       limit_amount = EXCLUDED.limit_amount,
+       alert_at = EXCLUDED.alert_at`,
     [userId, category, limit, alertAt]
   )
   return checkBudgetAlert(userId, category)
