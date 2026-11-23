@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import { z } from 'zod'
-import { getDb } from '../db/index.js'
+import { query, queryOne } from '../db/index.js'
 import { HttpError, requireAuth, validate, wrap } from '../http.js'
 
 const router = Router()
@@ -19,9 +19,9 @@ const shape = (u) => ({
   notifGoal: !!u.notif_goal,
   notifWeekly: !!u.notif_weekly,
 })
-const load = (id) => shape(getDb().prepare('SELECT * FROM users WHERE id = ?').get(id))
+const load = async (id) => shape(await queryOne('SELECT * FROM users WHERE id = ?', [id]))
 
-router.get('/me', (req, res) => res.json({ user: load(req.user.id) }))
+router.get('/me', wrap(async (req, res) => res.json({ user: await load(req.user.id) })))
 
 const profileSchema = z.object({
   name: z.string().trim().min(1, 'Nama lengkap wajib diisi.').max(80),
@@ -35,17 +35,18 @@ const profileSchema = z.object({
   notifWeekly: z.boolean().default(false),
 })
 
-router.put('/me', validate(profileSchema), (req, res) => {
+router.put('/me', validate(profileSchema), wrap(async (req, res) => {
   const b = req.body
-  const db = getDb()
-  const taken = db.prepare('SELECT 1 FROM users WHERE email = ? AND id <> ?').get(b.email, req.user.id)
+  const taken = await queryOne('SELECT 1 FROM users WHERE email = ? AND id <> ?', [b.email, req.user.id])
   if (taken) throw new HttpError(409, 'EMAIL_TAKEN', 'Email sudah dipakai akun lain.', { email: 'Email sudah dipakai akun lain.' })
-  db.prepare(`UPDATE users SET name = ?, email = ?, phone = ?, language = ?, currency = ?, budget_period = ?,
-              notif_budget = ?, notif_goal = ?, notif_weekly = ? WHERE id = ?`)
-    .run(b.name, b.email, b.phone, b.language, b.currency, b.budgetPeriod,
-      b.notifBudget ? 1 : 0, b.notifGoal ? 1 : 0, b.notifWeekly ? 1 : 0, req.user.id)
-  res.json({ user: load(req.user.id) })
-})
+  await query(
+    `UPDATE users SET name = ?, email = ?, phone = ?, language = ?, currency = ?, budget_period = ?,
+     notif_budget = ?, notif_goal = ?, notif_weekly = ? WHERE id = ?`,
+    [b.name, b.email, b.phone, b.language, b.currency, b.budgetPeriod,
+      b.notifBudget ? 1 : 0, b.notifGoal ? 1 : 0, b.notifWeekly ? 1 : 0, req.user.id]
+  )
+  res.json({ user: await load(req.user.id) })
+}))
 
 const passwordSchema = z.object({
   currentPassword: z.string().min(1, 'Kata sandi saat ini wajib diisi.'),
@@ -54,12 +55,11 @@ const passwordSchema = z.object({
 
 router.put('/me/password', validate(passwordSchema), wrap(async (req, res) => {
   const { currentPassword, newPassword } = req.body
-  const db = getDb()
-  const row = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id)
+  const row = await queryOne('SELECT password_hash FROM users WHERE id = ?', [req.user.id])
   if (!(await bcrypt.compare(currentPassword, row.password_hash))) {
     throw new HttpError(400, 'WRONG_PASSWORD', 'Kata sandi saat ini salah.', { currentPassword: 'Kata sandi saat ini salah.' })
   }
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(await bcrypt.hash(newPassword, 10), req.user.id)
+  await query('UPDATE users SET password_hash = ? WHERE id = ?', [await bcrypt.hash(newPassword, 10), req.user.id])
   res.json({ ok: true })
 }))
 

@@ -13,23 +13,26 @@ if (isProd && !process.env.JWT_SECRET) {
 
 export const config = {
   isProd,
-  port: Number(process.env.PORT) || 4000,
-  jwtSecret: process.env.JWT_SECRET || 'dev-only-secret-ganti-di-production',
+  port: Number(process.env.PORT),
+  jwtSecret: process.env.JWT_SECRET,
   jwtExpires: process.env.JWT_EXPIRES || '7d',
-  // Asal frontend yang diizinkan (pisahkan dengan koma)
-  corsOrigins: (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:4173')
+  corsOrigins: String(process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:4173')
     .split(',').map((s) => s.trim()).filter(Boolean),
-  dbPath: process.env.DB_PATH || path.join(root, 'data', 'savesmart.db'),
+  db: {
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: Number(process.env.DB_PORT) || 3306,
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD ?? '',
+    database: process.env.DB_NAME || 'savesmart_ai',
+  },
   migrationsDir: process.env.MIGRATIONS_DIR || path.resolve(root, '..', 'Database', 'migrations'),
-  // Isi akun baru dengan data contoh agar dashboard tidak kosong saat demo
   seedOnRegister: (process.env.SEED_ON_REGISTER ?? 'true') === 'true',
-  // OCR: 'mock' (hasil contoh) atau 'service' (panggil layanan AI di ocr/ai-service)
   ocrMode: process.env.OCR_MODE || 'mock',
-  ocrUrl: process.env.OCR_SERVICE_URL || 'http://localhost:5000/scan',
+  ocrUrl: process.env.OCR_SERVICE_URL || 'https://openrouter.ai/api/v1/chat/completions',
+  aiApiKey: process.env.OPENROUTER_API_KEY || '',
+  aiModel: process.env.OPENROUTER_MODEL || 'qwen/qwen2.5-vl-72b-instruct:free',
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB) || 8,
 }
 
-// Kategori pengeluaran (sama dengan pilihan di frontend)
 export const CATEGORIES = ['Makanan', 'Transport', 'Hiburan', 'Belanja', 'Tagihan', 'Kesehatan', 'Pendidikan', 'Lainnya']
-// Kategori pemasukan; kalau tidak diisi, otomatis 'Pemasukan'
 export const INCOME_CATEGORIES = ['Uang Saku', 'Gaji', 'Bonus', 'Hadiah', 'Lainnya']
