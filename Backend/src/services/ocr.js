@@ -5,12 +5,13 @@ import { HttpError } from '../http.js'
 import { today } from '../util.js'
 
 const FALLBACK_MODELS = [
-  'gemini-3.6-flash',
-  'gemini-3.5-flash-lite',
+  'gemini-3.5-flash',
   'gemini-3.8-flash',
+  'gemini-3.5-pro',
 ]
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+const sleep = (ms) =>
+  new Promise((resolve) => setTimeout(resolve, ms))
 
 function isValidISODate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
@@ -30,6 +31,7 @@ function extractJSON(content) {
 
   const cleaned = content
     .replace(/```(?:json)?/gi, '')
+    .replace(/```/g, '')
     .trim()
 
   const start = cleaned.indexOf('{')
@@ -45,6 +47,8 @@ function extractJSON(content) {
 }
 
 export async function scanReceipt({ file, simulateFail = false }) {
+
+  // 1. Validasi file
   if (!file) {
     throw new HttpError(
       400,
@@ -61,6 +65,7 @@ export async function scanReceipt({ file, simulateFail = false }) {
     )
   }
 
+  // 2. Validasi mode OCR
   if (config.ocrMode !== 'service') {
     throw new HttpError(
       500,
@@ -79,7 +84,7 @@ export async function scanReceipt({ file, simulateFail = false }) {
     )
   }
 
-  // 1. Optimasi gambar
+  // 3. Optimasi gambar
   let compressedBuffer
 
   try {
@@ -93,8 +98,9 @@ export async function scanReceipt({ file, simulateFail = false }) {
       })
       .jpeg({ quality: 85 })
       .toBuffer()
+
   } catch (err) {
-    console.error('Gagal memproses gambar struk:', err.message)
+    console.error('Gagal memproses gambar:', err.message)
 
     throw new HttpError(
       422,
@@ -105,7 +111,7 @@ export async function scanReceipt({ file, simulateFail = false }) {
 
   const base64Image = compressedBuffer.toString('base64')
 
-  // 2. Instruksi OCR
+  // 4. Prompt OCR
   const prompt = `
 Kamu adalah sistem OCR profesional untuk aplikasi keuangan Indonesia.
 
@@ -116,27 +122,28 @@ Ambil informasi berikut:
 1. title: Nama toko atau merchant.
 2. amount: TOTAL AKHIR yang harus dibayar pelanggan.
 3. category: Kategori pengeluaran.
-4. date: Tanggal transaksi.
+4. date: Tanggal transaksi dalam format YYYY-MM-DD.
 
 Pilih kategori hanya dari daftar berikut:
+
 ${CATEGORIES.join(', ')}
 
 ATURAN PENTING:
 
 - Ambil TOTAL BAYAR atau GRAND TOTAL.
 - Jangan mengambil subtotal jika terdapat total akhir.
-- Jangan mengambil nominal kembalian sebagai total transaksi.
+- Jangan mengambil nominal kembalian.
 - Jangan mengambil nominal pajak sebagai total transaksi.
 - Amount harus berupa integer Rupiah tanpa titik atau koma.
 - Jangan mengarang informasi yang tidak terlihat.
 - Jika tanggal tidak terbaca, isi string kosong.
-- Jika gambar bukan struk atau nominal total tidak dapat dibaca, gunakan amount 0.
+- Jika gambar bukan struk atau nominal tidak terbaca, amount harus 0.
 - Jika merchant tidak terbaca, gunakan "Transaksi Struk".
-- Pilih kategori berdasarkan jenis barang atau jasa yang dibeli.
-- Jangan menambahkan penjelasan di luar hasil JSON.
+- Pilih kategori berdasarkan barang atau jasa yang dibeli.
+- Jangan memberikan penjelasan di luar JSON.
 `
 
-  // 3. Structured output Gemini
+  // 5. Konfigurasi respons Gemini
   const generationConfig = {
     temperature: 0,
     maxOutputTokens: 1024,
@@ -162,7 +169,14 @@ ATURAN PENTING:
     },
   }
 
-  // 4. Urutan model
+  // 6. Daftar model Gemini
+  const baseUrl = String(
+    config.ocrUrl ||
+    'https://generativelanguage.googleapis.com/v1beta/models'
+  )
+    .replace(/\/$/, '')
+    .replace(/\/[^/]+:generateContent$/, '')
+
   const candidates = [
     ...new Set([
       config.aiModel,
@@ -173,26 +187,31 @@ ATURAN PENTING:
   let parsed = null
   let lastError = ''
 
-  // 5. Proses pemanggilan Gemini
+  // 7. Gọi API Gemini
   for (const modelName of candidates) {
+
     let modelSucceeded = false
 
     for (let attempt = 1; attempt <= 2; attempt++) {
+
       try {
         console.log(
-          `OCR: mencoba model ${modelName}, percobaan ${attempt}/2`
+          `OCR: thử model ${modelName}, lần ${attempt}/2`
         )
 
         const endpoint =
-          `${config.ocrUrl}/${encodeURIComponent(modelName)}:generateContent`
+          `${baseUrl}/${encodeURIComponent(modelName)}:generateContent`
 
         const response = await fetch(endpoint, {
           method: 'POST',
+
           headers: {
             'Content-Type': 'application/json',
             'x-goog-api-key': apiKey,
           },
+
           signal: AbortSignal.timeout(30000),
+
           body: JSON.stringify({
             contents: [
               {
@@ -207,11 +226,13 @@ ATURAN PENTING:
                 ],
               },
             ],
+
             generationConfig,
           }),
         })
 
         if (!response.ok) {
+
           lastError = await response.text()
 
           console.error(
@@ -219,7 +240,10 @@ ATURAN PENTING:
             lastError.slice(0, 1000)
           )
 
-          if (response.status === 401 || response.status === 403) {
+          if (
+            response.status === 401 ||
+            response.status === 403
+          ) {
             throw new HttpError(
               502,
               'OCR_AUTH_ERROR',
@@ -228,7 +252,8 @@ ATURAN PENTING:
           }
 
           if (
-            (response.status === 429 || response.status === 503) &&
+            (response.status === 429 ||
+              response.status === 503) &&
             attempt < 2
           ) {
             await sleep(1000 * attempt)
@@ -249,11 +274,12 @@ ATURAN PENTING:
 
         if (candidate.finishReason === 'MAX_TOKENS') {
           lastError = 'Respons Gemini terpotong karena batas token.'
-          console.warn(lastError)
           break
         }
 
-        const rawContent = (candidate.content?.parts || [])
+        const rawContent = (
+          candidate.content?.parts || []
+        )
           .map((part) => part.text || '')
           .join('')
           .trim()
@@ -264,7 +290,7 @@ ATURAN PENTING:
 
         if (!parsed) {
           lastError = `JSON tidak valid: ${rawContent.slice(0, 500)}`
-          console.error('Gagal parse JSON Gemini:', lastError)
+          console.error(lastError)
           break
         }
 
@@ -273,8 +299,12 @@ ATURAN PENTING:
         console.log(`OCR berhasil menggunakan ${modelName}`)
 
         break
+
       } catch (err) {
-        if (err instanceof HttpError) throw err
+
+        if (err instanceof HttpError) {
+          throw err
+        }
 
         lastError = err.message
 
@@ -294,11 +324,11 @@ ATURAN PENTING:
     parsed = null
 
     console.warn(
-      `Beralih ke model OCR berikutnya setelah ${modelName} gagal.`
+      `Beralih ke model berikutnya setelah ${modelName} gagal.`
     )
   }
 
-  // 6. Jika seluruh model gagal
+  // 8. Jika semua model gagal
   if (!parsed) {
     console.error('Seluruh model OCR gagal:', lastError)
 
@@ -308,13 +338,8 @@ ATURAN PENTING:
       'Layanan OCR sedang bermasalah. Silakan coba beberapa saat lagi atau input transaksi secara manual.'
     )
   }
-  console.log('HASIL JSON GEMINI:', parsed)
-console.log('TIPE AMOUNT:', typeof parsed.amount)
-console.log('NILAI AMOUNT:', parsed.amount)
-console.log('KATEGORI:', parsed.category)
-console.log('TANGGAL:', parsed.date)
 
-  // 7. Validasi hasil OCR
+  // 9. Validasi hasil OCR
   const amount = Number(parsed.amount)
 
   if (
@@ -332,7 +357,9 @@ console.log('TANGGAL:', parsed.date)
 
   const title = String(
     parsed.title || 'Transaksi Struk'
-  ).trim().slice(0, 100)
+  )
+    .trim()
+    .slice(0, 100)
 
   const validCategory = CATEGORIES.includes(parsed.category)
     ? parsed.category
@@ -346,7 +373,14 @@ console.log('TANGGAL:', parsed.date)
       ? parsed.date
       : currentDate
 
-  // 8. Hasil akhir untuk frontend
+  // 10. Hasil akhir
+  console.log('HASIL OCR:', {
+    title,
+    amount,
+    category: validCategory,
+    date: validDate,
+  })
+
   return {
     title,
     amount,
