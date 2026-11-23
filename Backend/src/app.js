@@ -12,9 +12,20 @@ import userRoutes from './routes/users.js'
 export function createApp() {
   getDb() // jalankan migrasi sebelum menerima request
   const app = express()
+  app.set('trust proxy', 1)
   app.disable('x-powered-by')
   app.use(helmet())
-  app.use(cors({ origin: config.corsOrigins }))
+  app.use(
+    cors({
+      origin: (origin, cb) => {
+        if (!origin) return cb(null, true)
+        if (config.corsOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+          return cb(null, true)
+        }
+        return cb(new Error('Not allowed by CORS'))
+      },
+    })
+  )
   app.use(express.json({ limit: '100kb' }))
 
   app.get('/api/health', (_req, res) => res.json({ status: 'ok' }))
@@ -34,4 +45,4 @@ export function createApp() {
   app.use(notFound)
   app.use(errorHandler)
   return app
-}
+}Z

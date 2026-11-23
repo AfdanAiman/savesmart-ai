@@ -1,4 +1,3 @@
-
 import { fmtDate } from './format.js';
 
 // ==========================================
@@ -6,7 +5,8 @@ import { fmtDate } from './format.js';
 // ==========================================
 
 export const API_URL = (
-  import.meta.env.VITE_API_URL || 'http://localhost:4000'
+  import.meta.env.VITE_API_URL ??
+  (import.meta.env.DEV ? 'http://localhost:4000' : '')
 ).replace(/\/+$/, '');
 
 let getToken = () => null;
@@ -40,7 +40,8 @@ async function request(method, path, {
   form,
   auth = true
 } = {}) {
-  const url = new URL(API_URL + '/api' + path);
+  const baseUrl = API_URL || window.location.origin;
+  const url = new URL(baseUrl + '/api' + path);
 
   Object.entries(query || {}).forEach(([k, v]) => {
     if (v !== undefined && v !== null && v !== '') {
@@ -78,7 +79,7 @@ async function request(method, path, {
   } catch {
     throw new ApiError(
       'Tidak dapat terhubung ke server. Pastikan Backend berjalan di ' +
-      API_URL + '.'
+      baseUrl + '.'
     );
   }
 
